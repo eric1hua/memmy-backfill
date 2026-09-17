@@ -70,7 +70,7 @@ cd ~/Developer/memmy-backfill
 ./install.sh
 ```
 
-然后双击 **`启动工作台.command`**，浏览器会自动打开 `http://127.0.0.1:19180`。
+`install.sh` 会生成带图标的 **`memmy 工作台.app`**，双击即可，浏览器会自动打开 `http://127.0.0.1:19180`。
 
 先点一次「开始体检」。
 
@@ -87,7 +87,9 @@ cd ~/Developer/memmy-backfill
 | `reembed.py` | 重嵌旧维度向量 |
 | `run-idle-batch.sh` | launchd 每次唤醒执行的闸门脚本 |
 | `install.sh` | 生成并加载 launchd 任务 |
-| `启动工作台.command` / `停止工作台.command` | 双击启停面板 |
+| `启动工作台.command` / `停止工作台.command` | 启停面板的 shell 入口 |
+| `build-app.sh` | 生成双击启动器 `memmy 工作台.app` |
+| `icon/make-icon.py` | 生成图标（图形即本工具报告的那件事：实心=摘要已补好，空心=还是占位符） |
 
 ---
 

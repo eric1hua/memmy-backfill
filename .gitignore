@@ -5,3 +5,9 @@ __pycache__/
 
 # 从模板生成、含本机路径
 com.memmy.backfill.plist
+
+# 由 build-app.sh 生成
+memmy 工作台.app/
+icon/memmy.iconset/
+icon/check-*.png
+icon/preview.png

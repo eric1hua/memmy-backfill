@@ -25,6 +25,9 @@ echo "定时任务已加载（每 10 分钟自检一次）"
 
 chmod +x "$DIR"/*.sh "$DIR"/*.py "$DIR"/*.command 2>/dev/null || true
 
+# 带图标的双击启动器
+bash "$DIR/build-app.sh"
+
 echo
-echo "安装完成。双击「启动工作台.command」打开面板。"
+echo "安装完成。双击「memmy 工作台.app」打开面板。"
 echo "先点一次「开始体检」，看看这台机器的记忆库有没有问题。"
