@@ -28,17 +28,29 @@ def current_dim(c):
 
 
 def targets(c, dim):
-    """返回 (memory_id, user_id, session_id)，只含真实摘要的旧维度记忆。"""
-    rows = c.execute("""SELECT DISTINCT e.memory_id, m.user_id, m.session_id, m.info_json
+    """返回 (memory_id, user_id, session_id)，旧维度且现在就能重嵌的记忆。
+
+    摘要占位符的判断只对 vec_summary 有意义。vec 是原文向量，
+    L2/L3/Skill 层根本没有 summary 字段，拿摘要状态去筛它们会全部误杀。
+
+    已经排着作业的也要排除：补摘要链路本来就会接着重嵌，
+    把它们算进来会重复入队，数字上也会把「在途」说成「卡住」。
+    """
+    rows = c.execute("""SELECT e.memory_id, e.vector_field, m.user_id, m.session_id, m.info_json
                         FROM memory_vector_entries e JOIN memories m ON m.id = e.memory_id
-                        WHERE e.embedding_dim != ? AND m.status = 'activated'""", (dim,)).fetchall()
-    out = []
-    for mid, uid, sid, ij in rows:
-        summary = (json.loads(ij) if ij else {}).get("summary") or ""
-        if is_placeholder(summary):
-            continue
-        out.append((mid, uid, sid))
-    return out
+                        WHERE e.embedding_dim != ? AND m.status = 'activated'
+                          AND NOT EXISTS (SELECT 1 FROM evolution_jobs j
+                                          WHERE j.target_memory_id = m.id
+                                            AND j.status IN ('queued','leased'))""", (dim,)).fetchall()
+    out = {}
+    for mid, field, uid, sid, ij in rows:
+        if field == "vec_summary":
+            # 占位符摘要重嵌了也没用，而且会把垃圾向量放回检索里
+            summary = (json.loads(ij) if ij else {}).get("summary") or ""
+            if is_placeholder(summary):
+                continue
+        out[mid] = (mid, uid, sid)
+    return list(out.values())
 
 
 def purge_stale(c):

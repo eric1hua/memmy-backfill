@@ -87,9 +87,13 @@ def diagnose():
     stale = sum(n for d, n in rows.items() if dim and d != dim)
     need_reembed = 0
     if stale:
+        # 排除已有在途作业的：那些会自己完成，不该报成「待你处理」
         for (ij,) in c.execute("""SELECT m.info_json FROM memory_vector_entries e
                                   JOIN memories m ON m.id = e.memory_id
-                                  WHERE e.embedding_dim != ? AND m.status='activated'""", (dim,)):
+                                  WHERE e.embedding_dim != ? AND m.status='activated'
+                                    AND NOT EXISTS (SELECT 1 FROM evolution_jobs j
+                                                    WHERE j.target_memory_id = m.id
+                                                      AND j.status IN ('queued','leased'))""", (dim,)):
             if not is_placeholder((json.loads(ij) if ij else {}).get('summary') or ''):
                 need_reembed += 1
     covered = stale - need_reembed
