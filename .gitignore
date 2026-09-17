@@ -1,0 +1,7 @@
+# 本机运行时产物，不进仓库
+*.log
+__pycache__/
+*.pyc
+
+# 从模板生成、含本机路径
+com.memmy.backfill.plist

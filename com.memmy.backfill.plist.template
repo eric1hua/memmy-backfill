@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.memmy.backfill</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>__DIR__/run-idle-batch.sh</string>
+    </array>
+
+    <!-- 每 10 分钟唤醒一次自检；真正的闲时判断在脚本里 -->
+    <key>StartInterval</key>
+    <integer>600</integer>
+
+    <!-- 后台优先级：launchd 会降低 CPU/IO 调度权重，不跟前台抢 -->
+    <key>ProcessType</key>
+    <string>Background</string>
+    <key>LowPriorityIO</key>
+    <true/>
+    <key>Nice</key>
+    <integer>10</integer>
+
+    <key>RunAtLoad</key>
+    <false/>
+
+    <key>StandardOutPath</key>
+    <string>__DIR__/launchd.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>__DIR__/launchd.err.log</string>
+</dict>
+</plist>

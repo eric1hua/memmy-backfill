@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>记忆补全</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ground:#10141c; --panel:#171d28; --line:#27303f;
+  --ink:#e6ebf2; --dim:#8a96a8; --faint:#5a6578;
+  --done:#5fd0a8; --hold:#e0a95c; --bad:#e0685c; --live:#6fa8ff;
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--ground); color:var(--ink);
+  font-family:Archivo,-apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue",sans-serif;
+  font-variant-numeric:tabular-nums; -webkit-font-smoothing:antialiased;
+  padding:clamp(20px,4vw,52px);
+}
+.wrap{max-width:1000px;margin:0 auto}
+
+/* ── 头部：剩余量是赌注 ── */
+header{border-bottom:1px solid var(--line);padding-bottom:28px;margin-bottom:28px}
+.count{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+.count b{font-size:clamp(52px,9vw,88px);font-weight:700;letter-spacing:-.035em;line-height:.9}
+.count span{font-size:17px;color:var(--dim);font-weight:500}
+.sub{margin-top:12px;color:var(--faint);font-size:14px}
+.tape{margin-top:20px;height:10px;background:#0a0e14;border:1px solid var(--line);
+      border-radius:2px;overflow:hidden;display:flex}
+.tape i{display:block;height:100%;background:var(--done);transition:width .6s cubic-bezier(.2,.7,.3,1)}
+.tape u{display:block;height:100%;background:var(--live);opacity:.55;transition:width .6s}
+
+/* ── 闸门：本页主角 ── */
+.grid{display:grid;grid-template-columns:1.15fr .85fr;gap:24px}
+@media(max-width:760px){.grid{grid-template-columns:1fr}}
+section h2{font-size:13px;font-weight:600;color:var(--dim);margin:0 0 14px;letter-spacing:.02em}
+.gate{border:1px solid var(--line);border-radius:4px;background:var(--panel)}
+.g{display:flex;align-items:center;gap:14px;padding:16px 18px;border-bottom:1px solid var(--line)}
+.g:last-child{border-bottom:none}
+.dot{width:9px;height:9px;border-radius:50%;flex:none;background:var(--faint);
+     box-shadow:0 0 0 0 transparent;transition:background .3s,box-shadow .3s}
+.g.ok .dot{background:var(--done);box-shadow:0 0 0 4px rgba(95,208,168,.14)}
+.g.no .dot{background:var(--hold);box-shadow:0 0 0 4px rgba(224,169,92,.14)}
+.g .nm{flex:1;font-size:15px;font-weight:500}
+.g .vl{font-size:16px;font-weight:600}
+.g.ok .vl{color:var(--done)} .g.no .vl{color:var(--hold)}
+.g .wt{font-size:12px;color:var(--faint);margin-top:3px}
+.verdict{padding:16px 18px;font-size:14px;line-height:1.55;border-top:1px solid var(--line);color:var(--dim)}
+.verdict.go{color:var(--done)} .verdict.run{color:var(--live)}
+
+/* ── 操作 ── */
+.acts{display:flex;flex-direction:column;gap:10px}
+button{font:inherit;font-weight:600;font-size:15px;padding:13px 18px;border-radius:3px;
+  border:1px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer;
+  text-align:left;transition:border-color .18s,background .18s}
+button:hover:not(:disabled){border-color:#3d4a5e;background:#1c2432}
+button:focus-visible{outline:2px solid var(--live);outline-offset:2px}
+button:disabled{opacity:.4;cursor:not-allowed}
+button small{display:block;font-weight:400;font-size:12.5px;color:var(--faint);margin-top:3px}
+button.on{border-color:rgba(95,208,168,.45)}
+button.on small{color:var(--done)}
+.row{display:flex;gap:10px}.row button{flex:1}
+input[type=number]{font:inherit;font-variant-numeric:tabular-nums;width:88px;padding:12px;
+  background:#0a0e14;border:1px solid var(--line);color:var(--ink);border-radius:3px}
+
+/* ── 日志 ── */
+.log{margin-top:28px;border:1px solid var(--line);border-radius:4px;background:#0a0e14;
+     padding:14px 16px;max-height:260px;overflow:auto;font-size:13px;line-height:1.75}
+.log div{color:var(--dim);white-space:pre-wrap;word-break:break-all}
+.log div:last-child{color:var(--ink)}
+.empty{color:var(--faint)}
+footer{margin-top:22px;color:var(--faint);font-size:12.5px}
+
+.quota{margin-top:28px}
+.qgrid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:560px){.qgrid{grid-template-columns:1fr}}
+.q{border:1px solid var(--line);border-radius:4px;background:var(--panel);padding:16px 18px}
+.qhead{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:11px}
+.qhead span{font-size:14px;color:var(--dim)}
+.qhead b{font-size:30px;font-weight:700;letter-spacing:-.02em}
+.qbar{height:6px;background:#0a0e14;border-radius:3px;overflow:hidden}
+.qbar i{display:block;height:100%;background:var(--done);transition:width .6s cubic-bezier(.2,.7,.3,1)}
+.q.low .qbar i{background:var(--hold)} .q.low .qhead b{color:var(--hold)}
+.q.out .qbar i{background:var(--bad)}  .q.out .qhead b{color:var(--bad)}
+.qfoot{margin-top:9px;font-size:12.5px;color:var(--faint)}
+
+.diag{margin-top:28px}
+.dhead{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.dhead h2{margin:0}
+button.ghost{padding:9px 15px;font-size:14px}
+.dbody{border:1px solid var(--line);border-radius:4px;background:var(--panel);overflow:hidden}
+.dbody .empty{margin:0;padding:22px 18px;font-size:14px;color:var(--faint)}
+.chk{display:grid;grid-template-columns:auto 1fr auto;gap:0 14px;padding:15px 18px;border-bottom:1px solid var(--line)}
+.chk:last-child{border-bottom:none}
+.chk .mk{grid-row:1/3;width:9px;height:9px;border-radius:50%;margin-top:6px;background:var(--done)}
+.chk.warn .mk{background:var(--hold)} .chk.bad .mk{background:var(--bad)}
+.chk .nm{font-size:15px;font-weight:600}
+.chk .vl{font-size:15px;font-weight:600;color:var(--done);white-space:nowrap}
+.chk.warn .vl{color:var(--hold)} .chk.bad .vl{color:var(--bad)}
+.chk .dt{grid-column:2/4;font-size:13.5px;line-height:1.6;color:var(--dim);margin-top:5px}
+.chk .fx{grid-column:2/4;font-size:13px;line-height:1.6;color:var(--faint);margin-top:6px;
+         padding-left:11px;border-left:2px solid var(--line)}
+.chk .fxa{grid-column:2/4;margin-top:9px}
+.mend{font:inherit;font-size:13px;padding:6px 13px;border-radius:7px;cursor:pointer;
+      color:var(--ink);background:transparent;border:1px solid var(--line)}
+.mend:hover:not(:disabled){border-color:var(--dim)}
+.mend:disabled{cursor:default;color:var(--faint);border-color:var(--line)}
+.dsum{padding:14px 18px;font-size:14px;border-bottom:1px solid var(--line);color:var(--dim)}
+.dsum.ok{color:var(--done)} .dsum.bad{color:var(--bad)}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="count"><b id="pending">—</b><span id="pendLabel">条记忆仍缺摘要</span></div>
+    <div class="sub" id="sub">正在读取…</div>
+    <div class="tape"><i id="bar" style="width:0"></i><u id="barq" style="width:0"></u></div>
+  </header>
+
+  <div class="grid">
+    <section>
+      <h2>闸门 · 任务只在你离开时运行</h2>
+      <div class="gate" id="gate"></div>
+    </section>
+
+    <section>
+      <h2>操作</h2>
+      <div class="acts">
+        <button id="toggle"><span id="toggleTxt">定时任务</span><small id="toggleSub">读取中</small></button>
+        <div class="row">
+          <button id="runNow">立即补一批<small>忽略闸门，现在就跑</small></button>
+          <input type="number" id="batch" value="120" min="10" max="1000" step="10" aria-label="每批条数">
+        </div>
+        <button id="stop" disabled>停止当前批次<small id="stopSub">没有正在运行的批次</small></button>
+      </div>
+    </section>
+  </div>
+
+  <section class="quota" id="quotaBox" hidden>
+    <h2>MiniMax 额度 · 摘要模型的燃料</h2>
+    <div class="qgrid">
+      <div class="q">
+        <div class="qhead"><span>本时段</span><b id="qi">—</b></div>
+        <div class="qbar"><i id="qib" style="width:0"></i></div>
+        <div class="qfoot" id="qif">—</div>
+      </div>
+      <div class="q">
+        <div class="qhead"><span>本周</span><b id="qw">—</b></div>
+        <div class="qbar"><i id="qwb" style="width:0"></i></div>
+        <div class="qfoot" id="qwf">—</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="diag">
+    <div class="dhead">
+      <h2 id="diagTitle">体检 · 记忆库健康</h2>
+      <button id="diagBtn" class="ghost">开始体检</button>
+    </div>
+    <div id="diagBody" class="dbody"><p class="empty">还没有体检记录。这台机器的记忆库是否健康，跑一次就知道。</p></div>
+  </section>
+
+  <div class="log" id="log"><div class="empty">暂无记录</div></div>
+  <footer id="foot">—</footer>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+let S = null, busy = false;
+
+async function load(){
+  try{
+    const r = await fetch('/api/status', {cache:'no-store'});
+    S = await r.json();
+    if(S.error) throw new Error(S.error);
+    render();
+  }catch(e){
+    $('#sub').textContent = '读取失败：' + e.message + '（面板服务是否还在运行？）';
+  }
+}
+
+function render(){
+  const done = S.done, total = S.total, pend = S.pending;
+  $('#pending').textContent = pend.toLocaleString();
+  $('#pendLabel').textContent = pend === 0 ? '条待补 · 全部完成' : '条记忆仍缺摘要';
+  $('#sub').textContent = `已补 ${done.toLocaleString()} · 共 ${total.toLocaleString()} · 完成 ${(done/total*100).toFixed(1)}%`;
+  $('#bar').style.width = (done/total*100) + '%';
+  const q = (S.queue['import_summary:queued']||0) + (S.queue['embedding:queued']||0);
+  $('#barq').style.width = Math.min(q/total*100, 100-done/total*100) + '%';
+
+  $('#gate').innerHTML = S.gates.map(g => `
+    <div class="g ${g.ok?'ok':'no'}">
+      <span class="dot"></span>
+      <span class="nm">${g.name}<div class="wt">${g.want}</div></span>
+      <span class="vl">${g.value}</span>
+    </div>`).join('') + verdict();
+
+  const t = $('#toggle');
+  t.classList.toggle('on', S.enabled);
+  $('#toggleTxt').textContent = S.enabled ? '停用定时任务' : '启用定时任务';
+  $('#toggleSub').textContent = S.enabled ? '已启用 · 每 10 分钟自检一次' : '未启用 · 不会自动运行';
+
+  $('#runNow').disabled = S.running || busy;
+  $('#stop').disabled = !S.running;
+  $('#stopSub').textContent = S.running ? '批次进行中' : '没有正在运行的批次';
+
+  const L = $('#log');
+  L.innerHTML = S.log.length ? S.log.map(l=>`<div>${esc(l)}</div>`).join('') : '<div class="empty">暂无记录</div>';
+  L.scrollTop = L.scrollHeight;
+
+  const quota = S.quota || {};
+  const box = $('#quotaBox');
+  box.hidden = false;
+  if(quota.ok){
+    setQ('#qi','#qib','#qif', quota.interval_pct, quota.interval_reset_s, '后重置');
+    setQ('#qw','#qwb','#qwf', quota.weekly_pct,   quota.weekly_reset_s,   '后重置');
+  } else {
+    $('#qi').textContent = '—'; $('#qw').textContent = '—';
+    $('#qif').textContent = quota.error || '查询失败'; $('#qwf').textContent = '';
+  }
+
+  const v = S.vectors || {};
+  $('#foot').textContent = `向量 ${Object.entries(v).map(([d,n])=>`${d} 维 ${n.toLocaleString()} 条`).join(' · ')}`
+    + (q ? ` · 队列待处理 ${q}` : '');
+}
+
+function verdict(){
+  if(S.running) return `<div class="verdict run">批次正在运行中。</div>`;
+  if(!S.enabled) return `<div class="verdict">定时任务未启用。启用后，满足全部条件时会自动补一批。</div>`;
+  if(S.allowed)  return `<div class="verdict go">条件已满足，下次自检时会开始补。</div>`;
+  const blocked = S.gates.filter(g=>!g.ok).map(g=>g.name).join('、');
+  return `<div class="verdict">现在不会运行：${blocked}未达标。离开键盘 5 分钟后会自动开始。</div>`;
+}
+
+
+function setQ(pctSel, barSel, footSel, pct, resetS, suffix){
+  const el = $(pctSel), box = el.closest('.q');
+  el.textContent = pct + '%';
+  $(barSel).style.width = pct + '%';
+  box.classList.toggle('low', pct <= 25 && pct > 5);
+  box.classList.toggle('out', pct <= 5);
+  const h = Math.floor(resetS/3600), m = Math.floor(resetS%3600/60);
+  $(footSel).textContent = (h ? h + ' 小时 ' : '') + m + ' 分钟' + suffix;
+}
+
+const esc = s => s.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+
+async function post(path, body){
+  busy = true; render();
+  try{
+    const r = await fetch(path, {method:'POST', headers:{'Content-Type':'application/json'},
+                                 body: JSON.stringify(body||{})});
+    const d = await r.json();
+    if(d.error) alert(d.error);
+  }catch(e){ alert('操作失败：'+e.message); }
+  busy = false; await load();
+}
+
+$('#toggle').onclick  = () => post(S.enabled ? '/api/disable' : '/api/enable');
+$('#runNow').onclick  = () => post('/api/run-now', {batch: +$('#batch').value});
+$('#stop').onclick    = () => post('/api/stop');
+
+
+const LV = {ok:'正常', warn:'需留意', bad:'有问题'};
+const ACT = {'reembed':'重嵌旧向量', 'retry-failed':'重试历史失败'};
+
+async function mend(btn){
+  const act = btn.dataset.act, label = btn.textContent;
+  btn.disabled = true; btn.textContent = '已开始…';
+  try{
+    const r = await fetch('/api/' + act, {method:'POST'});
+    if(!r.ok) throw new Error((await r.json()).error || r.statusText);
+    btn.textContent = '已在后台运行，看下方日志';
+  }catch(e){
+    btn.disabled = false; btn.textContent = label + '（失败：' + e.message + '）';
+  }
+}
+async function diagnose(){
+  const btn = $('#diagBtn'), body = $('#diagBody');
+  btn.disabled = true; btn.textContent = '体检中…';
+  try{
+    const d = await (await fetch('/api/diagnose', {cache:'no-store'})).json();
+    if(d.error) throw new Error(d.error);
+    const bad = d.checks.filter(c=>c.level==='bad').length;
+    const warn = d.checks.filter(c=>c.level==='warn').length;
+    const sum = d.overall==='ok' ? '全部检查项正常，记忆库健康。'
+      : `${bad?bad+' 项有问题':''}${bad&&warn?'，':''}${warn?warn+' 项需留意':''}。`;
+    body.innerHTML = `<div class="dsum ${d.overall}">${sum} 体检于 ${d.at}</div>` +
+      d.checks.map(c=>`
+        <div class="chk ${c.level}">
+          <span class="mk"></span>
+          <span class="nm">${esc(c.name)}</span>
+          <span class="vl">${esc(c.value)}</span>
+          <div class="dt">${esc(c.detail)}</div>
+          ${c.fix ? `<div class="fx">${esc(c.fix)}</div>` : ''}
+          ${c.action ? `<div class="fxa"><button class="mend" data-act="${esc(c.action)}">${esc(ACT[c.action])}</button></div>` : ''}
+        </div>`).join('');
+    body.querySelectorAll('.mend').forEach(b => b.onclick = () => mend(b));
+    $('#diagTitle').textContent = '体检 · 记忆库健康';
+  }catch(e){
+    body.innerHTML = `<p class="empty">体检失败：${esc(e.message)}</p>`;
+  }
+  btn.disabled = false; btn.textContent = '重新体检';
+}
+$('#diagBtn').onclick = diagnose;
+
+load(); setInterval(load, 5000);
+</script>
+</body>
+</html>
