@@ -212,6 +212,27 @@ def minimax_key():
         return None
 
 
+def _minimax_fetch(key):
+    """查 MiniMax 余量。先直连，失败再走系统代理。
+
+    MiniMax 是国内服务，直连才是常态；但面板如果从带 HTTP_PROXY 的
+    终端启动，curl 会默认走那个代理，而翻墙代理通常到不了国内站点，
+    结果就是额度栏莫名其妙显示「查询失败」。从 Finder 双击启动时没有
+    代理变量，碰不到这个问题，所以这个坑很难被发现。
+    """
+    base = ["curl", "-s", "--max-time", "25", "-L", MINIMAX_QUOTA_URL,
+            "-H", f"Authorization: Bearer {key}",
+            "-H", "Content-Type: application/json"]
+    last = None
+    for args in ([*base, "--noproxy", "*"], base):
+        try:
+            r = subprocess.run(args, capture_output=True, text=True, timeout=30)
+            return json.loads(r.stdout)
+        except Exception as e:
+            last = e
+    raise last
+
+
 def quota():
     """MiniMax token plan 余量。缓存 120 秒，失败不影响面板其余部分。"""
     with _lock:
@@ -223,11 +244,7 @@ def quota():
         out = {"ok": False, "error": "config.yaml 中未找到摘要模型 key"}
     else:
         try:
-            r = subprocess.run(["curl", "-s", "--max-time", "25", "-L", MINIMAX_QUOTA_URL,
-                                "-H", f"Authorization: Bearer {key}",
-                                "-H", "Content-Type: application/json"],
-                               capture_output=True, text=True, timeout=30)
-            d = json.loads(r.stdout)
+            d = _minimax_fetch(key)
             if d.get("base_resp", {}).get("status_code") != 0:
                 out = {"ok": False, "error": d.get("base_resp", {}).get("status_msg", "接口返回异常")}
             else:
@@ -398,13 +415,15 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def do_GET(self):
-        if self.path.startswith("/api/diagnose"):
+        # 先剥掉 query string，否则 /?foo=1 这类带参数的地址会落到 404
+        path = self.path.split("?", 1)[0]
+        if path == "/api/diagnose":
             try: self._send(200, json.dumps(diagnose(), ensure_ascii=False))
             except Exception as e: self._send(500, json.dumps({"error": str(e)}, ensure_ascii=False))
-        elif self.path.startswith("/api/status"):
+        elif path == "/api/status":
             try: self._send(200, json.dumps(status(), ensure_ascii=False))
             except Exception as e: self._send(500, json.dumps({"error": str(e)}))
-        elif self.path in ("/", "/index.html"):
+        elif path in ("/", "/index.html"):
             try:
                 with open(f"{DIR}/panel.html", "rb") as f:
                     self._send(200, f.read(), "text/html; charset=utf-8")
