@@ -79,44 +79,56 @@ def diagnose():
 
     # 2) 维度失配：旧向量对当前模型不可见
     #
-    # 必须拆成两半看，否则数字会误导：占位符那批补摘要时会顺带重嵌，
-    # 已有真实摘要的那批补摘要链路会直接跳过，只能单独重嵌。
+    # 必须按「谁来修」分类，否则数字会骗人。四种情况的处理方式完全不同：
+    #   待重嵌  —— 已激活、摘要是好的、没有在途作业，只有这一类需要人动手
+    #   等摘要  —— 摘要还是占位符，补摘要时会顺带用新模型重嵌
+    #   在途    —— 已经排着作业，会自己完成
+    #   不参与  —— 记忆本身不是 activated（处理中／已归档），根本不进检索
     dim = current_dim()
     rows = dict((d, n) for d, n in c.execute(
         "SELECT embedding_dim, COUNT(*) FROM memory_vector_entries GROUP BY 1"))
     stale = sum(n for d, n in rows.items() if dim and d != dim)
-    need_reembed = 0
+    need_reembed = waiting = inflight = inactive = 0
     if stale:
-        # 排除已有在途作业的：那些会自己完成，不该报成「待你处理」
-        for (ij,) in c.execute("""SELECT m.info_json FROM memory_vector_entries e
-                                  JOIN memories m ON m.id = e.memory_id
-                                  WHERE e.embedding_dim != ? AND m.status='activated'
-                                    AND NOT EXISTS (SELECT 1 FROM evolution_jobs j
-                                                    WHERE j.target_memory_id = m.id
-                                                      AND j.status IN ('queued','leased'))""", (dim,)):
-            if not is_placeholder((json.loads(ij) if ij else {}).get('summary') or ''):
+        for status, ij, busy in c.execute(
+                """SELECT m.status, m.info_json,
+                          EXISTS(SELECT 1 FROM evolution_jobs j
+                                 WHERE j.target_memory_id = m.id
+                                   AND j.status IN ('queued','leased'))
+                   FROM memory_vector_entries e JOIN memories m ON m.id = e.memory_id
+                   WHERE e.embedding_dim != ?""", (dim,)):
+            if status != "activated":
+                inactive += 1
+            elif busy:
+                inflight += 1
+            elif is_placeholder((json.loads(ij) if ij else {}).get("summary") or ""):
+                waiting += 1
+            else:
                 need_reembed += 1
-    covered = stale - need_reembed
+
+    parts = []
+    if waiting:      parts.append(f"{waiting} 条等补摘要时顺带重嵌")
+    if inflight:     parts.append(f"{inflight} 条已排队处理")
+    if inactive:     parts.append(f"{inactive} 条属于处理中／已归档的记忆，本来就不进检索")
+    if need_reembed: parts.append(f"{need_reembed} 条摘要是好的但补摘要链路会跳过，需要单独重嵌")
+
     checks.append({
         "key": "dim",
         "name": "向量维度一致性",
-        # 只有「补摘要修不到」的那部分才算问题：其余由占位符那一项负责跟踪
-        # 后果虽然是二元的（要么召回要么完全搜不到），但个位数不值得拉红灯
+        # 只有「需要人动手」的那部分才算问题；后果虽是二元的，但个位数不值得拉红灯
         "level": ("ok" if stale == 0 else
-                  ("bad" if need_reembed >= 20 else "warn")),
+                  ("bad" if need_reembed >= 20 else
+                   ("warn" if need_reembed or waiting else "ok"))),
         "value": (f"{dim} 维统一" if stale == 0 else
-                  (f"{need_reembed} 条待重嵌" if need_reembed else f"{covered} 条随补摘要修复")),
+                  (f"{need_reembed} 条待重嵌" if need_reembed else
+                   (f"{waiting} 条随补摘要修复" if waiting else f"{inactive + inflight} 条无需处理"))),
         "detail": (f"全部向量都是 {dim} 维，与当前模型一致。" if stale == 0 else
                    f"当前模型输出 {dim} 维，但有 {stale} 条向量是其他维度"
                    f"（{', '.join(f'{d}维 {n}条' for d, n in sorted(rows.items()) if d != dim)}）。"
                    "检索按维度严格隔离，这些向量对语义召回完全不可见，且不会报错。"
-                   + (f"其中 {covered} 条摘要还是占位符，补摘要时会用新模型重嵌；"
-                      if covered else "")
-                   + (f"另有 {need_reembed} 条摘要是好的，补摘要链路会跳过它们，必须单独重嵌。"
-                      if need_reembed else "剩下的都会被补摘要覆盖，无需单独处理。")),
-        "fix": (None if stale == 0 else
-                ("点「重嵌旧向量」处理这 %d 条。" % need_reembed if need_reembed else
-                 "无需单独操作，等补摘要跑完即可。")),
+                   + ("其中 " + "、".join(parts) + "。" if parts else "")),
+        "fix": (None if not need_reembed else
+                f"点「重嵌旧向量」处理这 {need_reembed} 条。"),
         "action": "reembed" if need_reembed else None,
     })
 
